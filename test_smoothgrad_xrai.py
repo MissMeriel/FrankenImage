@@ -17,13 +17,16 @@ sys.path.append('models')
 device = torch.device("cpu") #torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 # saliency/SmoothGrad utils
-def ShowImage(im, title='', ax=None):
+def ShowImage(im, title='', ax=None, save=False):
     if ax is None:
         P.figure()
     P.axis('off')
     P.imshow(im)
     P.title(title)
     P.pause(1)
+    if save:
+        randstr = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(6))
+        P.savefig(f"test-xrai-{randstr}.jpg")
 
 def ShowGrayscaleImage(im, title='', ax=None, save=False):
     if ax is None:
@@ -34,14 +37,17 @@ def ShowGrayscaleImage(im, title='', ax=None, save=False):
     P.pause(3)
     if save:
         randstr = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(6))
-        P.savefig(f"test-integratedgrad-{randstr}.jpg")
+        P.savefig(f"test-xrai-{randstr}.jpg")
 
-def ShowHeatMap(im, title, ax=None):
+def ShowHeatMap(im, title, ax=None, save=False):
     if ax is None:
         P.figure()
     P.axis('off')
     P.imshow(im, cmap='inferno')
     P.title(title)
+    if save:
+        randstr = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(6))
+        P.savefig(f"test-xrai-{randstr}.jpg")
 
 def LoadImage(file_path, imsize=(240, 135)):
     im = PIL.Image.open(file_path)
@@ -73,10 +79,11 @@ ptfilename = "models/model-DAVE2v1-lr1e4-100epoch-batch64-lossMSE-82Ksamples-IND
 model = torch.load(ptfilename).eval().to(device)
 
 # import validation images
-# img_fqp = "/home/meriel/datasets/sampledir/arrows0.png"
+img_fqp = "/home/meriel/datasets/sampledir/arrows59.png"
+# img_fqp = "/home/meriel/datasets/training_images_industrial-racetrackstartinggate0/hopper_industrial_374.jpg"
+
 # img_fqp = "/home/meriel/datasets/hirochi_raceway-9205-lap-test2/sample-00001.jpg"
 # img_fqp = "/home/meriel/datasets/training_images_industrial-racetrackstartinggate0/hopper_industrial_0.jpg"
-img_fqp = "/home/meriel/datasets/training_images_industrial-racetrackstartinggate0/hopper_industrial_364.jpg"
 image_dims = (135, 240)
 batch_size=32
 im_orig = LoadImage(img_fqp)
@@ -133,40 +140,26 @@ print("Prediction class: " + str(prediction_class))
 # im = im_orig.astype(np.float32)
 # im = np.transpose(im, (2,0,1))[None]
 # print(f"{im.shape=}")
-
 # Construct the saliency object. This alone doesn't do anthing.
-integrated_gradients = saliency.IntegratedGradients()
+xrai_object = saliency.XRAI()
 
-# Baseline is a black image.
-baseline = np.zeros(im_orig.shape)
-
-# Compute the vanilla mask and the smoothed mask.
-vanilla_integrated_gradients_mask_3d = integrated_gradients.GetMask(
-im_orig, call_model_function, call_model_args, x_steps=25, x_baseline=baseline, batch_size=20)
-# Smoothed mask for integrated gradients will take a while since we are doing nsamples * nsamples computations.
-smoothgrad_integrated_gradients_mask_3d = integrated_gradients.GetSmoothedMask(
-im_orig, call_model_function, call_model_args, x_steps=25, x_baseline=baseline, batch_size=20)
-
-# Call the visualization methods to convert the 3D tensors to 2D grayscale.
-vanilla_mask_grayscale = saliency.VisualizeImageGrayscale(vanilla_integrated_gradients_mask_3d)
-smoothgrad_mask_grayscale = saliency.VisualizeImageGrayscale(smoothgrad_integrated_gradients_mask_3d)
+# Compute XRAI attributions with default parameters
+xrai_attributions = xrai_object.GetMask(im_orig, call_model_function, call_model_args, batch_size=20)
 
 # Set up matplot lib figures.
 ROWS = 1
-COLS = 2
-UPSCALE_FACTOR = 10
+COLS = 3
+UPSCALE_FACTOR = 20
 P.figure(figsize=(ROWS * UPSCALE_FACTOR, COLS * UPSCALE_FACTOR))
 
-# Render the saliency masks.
-ShowGrayscaleImage(vanilla_mask_grayscale, title='Vanilla Integrated Gradients', ax=P.subplot(ROWS, COLS, 1))
-ShowGrayscaleImage(smoothgrad_mask_grayscale, title='Smoothgrad Integrated Gradients', ax=P.subplot(ROWS, COLS, 2), save=True)
+# Show original image
+ShowImage(im_orig, title='Original Image', ax=P.subplot(ROWS, COLS, 1))
 
-# noise-out salient regions
+# Show XRAI heatmap attributions
+ShowHeatMap(xrai_attributions, title='XRAI Heatmap', ax=P.subplot(ROWS, COLS, 2))
 
-# run through VQVAE
-
-# patch VQVAE'd region back into original image
-
-# test frankenimage against original image
-
-# test frankenimage against original image with noised-out regions
+# Show most salient 30% of the image
+mask = xrai_attributions >= np.percentile(xrai_attributions, 50)
+im_mask = np.array(im_orig)
+im_mask[~mask] = 0
+ShowImage(im_mask, title='Top 50%', ax=P.subplot(ROWS, COLS, 3), save=True)

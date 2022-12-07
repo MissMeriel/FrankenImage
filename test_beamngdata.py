@@ -26,7 +26,7 @@ X_valid = generator.process_training_dir(fqp, imgsize=image_dims)
 print(type(X_valid[0][0]))
 print(f"{X_valid[0][0].shape=}")
 # import VQVAE
-# vqvaemodel = VQVAE.instantiate_VQVAE(checkpoint_root="merielsvae-checkpoints136x240")
+vqvaemodel = VQVAE.instantiate_VQVAE(checkpoint_root="merielsvae-checkpoints136x240")
 
 # import base DAVE2 model
 from models.DAVE2pytorch import * #DAVE2pytorch, DAVE2v1, DAVE2v2, DAVE2v3, Epoch
