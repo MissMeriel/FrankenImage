@@ -24,7 +24,7 @@ def ShowImage(im, title='', ax=None, save=False, fid=None):
     P.axis('off')
     P.imshow(im)
     P.title(title)
-    P.pause(1)
+    P.pause(3)
     if save:
         randstr = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(6))
         if fid is not None:
@@ -150,7 +150,6 @@ ShowImage(im_orig, title=f"Orig. img pred={predictions.detach().numpy().item():.
 # predictions = predictions.detach().numpy().item()
 prediction_class = predictions
 call_model_args = {class_idx_str: prediction_class}
-exit(0)
 
 use_xrai = True
 use_vanilla_smoothgrad = False
@@ -206,6 +205,7 @@ elif use_xrai:
 print(im_mask.shape)
 print(f"{np.mean(im_mask)=} \n{np.std(im_mask)=} \n{np.min(im_mask)=} \t {np.max(im_mask)=} \t {type(im_mask)}")
 im_unpert = LoadImage("/home/meriel/datasets/training_images_industrial-racetrackstartinggate0/hopper_industrial_374.jpg", imsize=image_dims[::-1])
+print(f"{im_unpert[:,:,0].shape=}")
 mean0 = np.mean(im_unpert[:,:,0])
 std0 = np.std(im_unpert[:,:,0])
 mean1 = np.mean(im_unpert[:,:,1])
@@ -221,14 +221,8 @@ im_out = np.copy(im_orig)
 #                                     np.random.choice((-1, 0, 1)) * np.random.normal(loc=mean2,scale=std2)])
 #             im_out[i][j][:] = np.clip(im_out[i][j][:] + 0.5 * np.squeeze(noisy_arr), 0, 255)
 
-print(np.unique(xrai_attributions))
+print(f"{np.unique(xrai_attributions)=}")
 # use xrai heatmap to determine masking
-# 56.6, 35, 100
-# ORANGE_MIN = np.array([54, 30, 90],np.uint8)
-# ORANGE_MAX = np.array([58, 37, 110],np.uint8)
-# hsv_img = cv2.cvtColor(xrai_attributions, cv2.COLOR_BGR2HSV)
-# frame_threshed = cv2.inRange(xrai_attributions, ORANGE_MIN, ORANGE_MAX)
-# cv2.imwrite('output2.jpg', frame_threshed)
 xrai_attributions_index = -1
 xrai_max_val = np.unique(xrai_attributions)[xrai_attributions_index]
 for i in range(xrai_attributions.shape[0]):
@@ -243,6 +237,9 @@ for i in range(xrai_attributions.shape[0]):
 
 
 ShowImage(im_out, title='noise-filled mask', save=True)
+im_out_tensor = PreprocessImages([im_out])
+predictions = model(im_out_tensor)
+ShowImage(im_out, title=f'Noise-filled mask pred={predictions.detach().numpy().item():.3f}', save=True)
 
 # run through VQVAE
 im_out = cv2.resize(im_out, (240, 136), interpolation = cv2.INTER_AREA)
@@ -255,11 +252,15 @@ ShowImage(temp_reconst[0], title='vae refill', save=True)
 
 # patch VQVAE'd region back into original image
 im_patched = np.copy(im_orig)
-xrai_max_val = np.unique(xrai_attributions)[xrai_attributions_index]
+temp_reconst = cv2.resize(temp_reconst[0], (240, 135), interpolation = cv2.INTER_AREA)
+ShowImage(temp_reconst, title='temp_reconst resized for patching', save=True)
+# xrai_max_val = np.unique(xrai_attributions)[xrai_attributions_index]
 for i in range(xrai_attributions.shape[0]):
     for j in range(xrai_attributions.shape[1]):
         if (xrai_attributions[i][j] == xrai_max_val):
-            im_patched[i][j][:] = im_out[i][j][:]
+            im_patched[i][j][:] = (temp_reconst[i][j][:]) * 255
+
+ShowImage(im_patched, title='im_patched', save=True)
 
 # test frankenimage against original image
 frankenimg = cv2.resize(im_patched, (240, 135), interpolation = cv2.INTER_AREA)
@@ -269,6 +270,6 @@ print(f"{frankenimg_tensor.shape=} \t {type(frankenimg_tensor)}")
 print(f"{frankenimg_tensor.shape=} \t {type(frankenimg_tensor)}")
 predictions = model(frankenimg_tensor)
 print(f"{predictions=}")
-ShowImage(temp_reconst[0], title=f'FrankenImage pred={predictions.detach().numpy().item():.3f}', save=True)
+ShowImage(frankenimg, title=f'FrankenImage pred={predictions.detach().numpy().item():.3f}', save=True)
 
 # test frankenimage against original image with noised-out regions
